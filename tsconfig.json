@@ -9,6 +9,8 @@
     "allowJs": true,
 
     // Bundler mode
+    "rootDir": "src",
+    "outDir": "dist",
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
