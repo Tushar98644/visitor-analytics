@@ -1,11 +1,20 @@
 import { Server } from 'ws';
+import type { WebSocket } from 'ws';
+import { consumeEvents } from '@/modules/analytics/services/EventStreamConsumer';
 
-const wss = new Server({ port: Number(process.env.PORT) || 8080 });
+const wss = new Server({ port: 8080 });
+const clients = new Set<WebSocket>();
 
 wss.on('connection', (ws) => {
-  ws.on('message', (msg) => {
-    console.log(msg);
-  });
+  clients.add(ws);
+  ws.on('close', () => clients.delete(ws));
+});
 
-  ws.send('WebSocket connected');
+consumeEvents((event) => {
+  const payload = JSON.stringify(event);
+  for (const ws of clients) {
+    if (ws.readyState === ws.OPEN) {
+      ws.send(payload);
+    }
+  }
 });
