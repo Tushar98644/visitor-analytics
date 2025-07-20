@@ -1,70 +1,91 @@
-import redis from '@/config/redisClient';
+import { eventStore } from "@/storage/EventStore";
 
 interface AnalyticsSummary {
   totalPageViews: number;
   uniqueSessions: number;
   topCountries: Array<{ country: string; count: number }>;
+  totalEvents: number;
   lastUpdated: string;
 }
 
-interface StreamEntry {
-  id: string;
-  message: Record<string, string>;
-}
-
-interface VisitorEvent {
-  type: string;
-  sessionId: string;
-  country: string;
-  [key: string]: string; 
-}
-
 export default class AnalyticsService {
-  private readonly CACHE_KEY = 'analytics:summary';
-  private readonly CACHE_TTL = 300;
+  private cache: AnalyticsSummary | null = null;
+  private cacheTimestamp: number = 0;
+  private readonly CACHE_TTL = 30000;
 
-  async getSummary(): Promise<AnalyticsSummary> {
-    const cached = await redis.get(this.CACHE_KEY);
-    if (cached) {
-      return JSON.parse(cached) as AnalyticsSummary;
+  getSummary(): AnalyticsSummary & { totalToday: number } {
+    const now = Date.now();
+
+    if (this.cache && now - this.cacheTimestamp < this.CACHE_TTL) {
+      return this.cache as AnalyticsSummary & { totalToday: number };
     }
 
-    const summary = await this.computeSummary();
-    
-    await redis.setex(
-      this.CACHE_KEY,
-      this.CACHE_TTL,
-      JSON.stringify(summary)
+    const pageViews = eventStore.getPageViews();
+    const uniqueSessions = eventStore.getUniqueSessions();
+    const countries = eventStore.getCountriesStats();
+
+    const today = new Date().toISOString().slice(0, 10);
+    const todayViews = pageViews.filter(
+      (ev) => ev.timestamp.slice(0, 10) === today
     );
-
-    return summary;
-  }
-
-  private async computeSummary(): Promise<AnalyticsSummary> {
-    const events = await redis.xRange('visitor-events', '-', '+') as StreamEntry[];
-    
-    const sessions = new Set<string>();
-    const countries: Record<string, number> = {};
-    let pageViews = 0;
-
-    for (const entry of events) {
-      const event = entry.message as VisitorEvent;
-      
-      if (event.type === 'pageview') pageViews++;
-      sessions.add(event.sessionId);
-      countries[event.country] = (countries[event.country] || 0) + 1;
-    }
 
     const topCountries = Object.entries(countries)
       .map(([country, count]) => ({ country, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
 
-    return {
-      totalPageViews: pageViews,
-      uniqueSessions: sessions.size,
+    const summary: AnalyticsSummary & { totalToday: number } = {
+      totalPageViews: pageViews.length,
+      uniqueSessions: uniqueSessions.length,
       topCountries,
+      totalEvents: eventStore.getEventCount(),
+      totalToday: todayViews.length,
       lastUpdated: new Date().toISOString(),
+    };
+
+    this.cache = summary;
+    this.cacheTimestamp = now;
+
+    return summary;
+  }
+
+  invalidateCache() {
+    this.cache = null;
+  }
+
+  getSessionsData() {
+    const sessions: Record<string, any> = {};
+    const allEvents = eventStore.getAllEvents();
+
+    allEvents.forEach((event) => {
+      if (!sessions[event.sessionId]) {
+        sessions[event.sessionId] = {
+          sessionId: event.sessionId,
+          country: event.country,
+          pages: [],
+          events: [],
+          startTime: event.timestamp,
+          lastActivity: event.timestamp,
+        };
+      }
+
+      const session = sessions[event.sessionId];
+      session.events.push({
+        type: event.type,
+        page: event.page,
+        timestamp: event.timestamp,
+      });
+
+      if (event.type === "pageview") {
+        session.pages.push(event.page);
+      }
+
+      session.lastActivity = event.timestamp;
+    });
+
+    return {
+      sessions: Object.values(sessions),
+      totalSessions: Object.keys(sessions).length,
     };
   }
 }
