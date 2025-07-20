@@ -1,0 +1,14 @@
+{
+  "name": "visitor-analytics",
+  "module": "index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest",
+    "eslint": "^9.31.0",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.3"
+  },
+  "peerDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
