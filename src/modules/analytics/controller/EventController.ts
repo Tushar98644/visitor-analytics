@@ -21,6 +21,8 @@ export default class EventController {
       serializeForRedis(parseResult.data)
     );
 
+    await redis.del('analytics:summary');
+
     res.status(202).send({ status: 'queued' });
   }
 }

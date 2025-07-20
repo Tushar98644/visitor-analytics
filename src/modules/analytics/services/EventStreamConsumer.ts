@@ -1,28 +1,33 @@
-import redis from '@/config/redisClient'
+import redis from '@/config/redisClient';
 
-export async function consumeEvents(callback: (event: any) => void) {
-    let lastId = '$';
-    while (true) {
-      try {
-        const response = await redis.xRead(
-          [{ key: 'visitor-events', id: lastId }],
-          { BLOCK: 0 }
-        );
+interface StreamResponse {
+  name: string;
+  messages: Array<{
+    id: string;
+    message: Record<string, string>;
+  }>;
+}
+
+interface StreamEvent {
+  [key: string]: string;
+}
+
+export async function consumeEvents(callback: (event: StreamEvent) => void): Promise<void> {
+  let lastId = '$';
   
-        if (Array.isArray(response)) {
-            const streams = response;
-          
-            for (const stream of streams) {
-              for (const { id, message } of stream.messages) {
-                lastId = id;
-                callback(message);
-              }
-            }
-        }          
-      } catch (error) {
-        console.error('❌ Error in consumeEvents:', error);
-        await new Promise((res) => setTimeout(res, 1000)); 
+  while (true) {
+    const response = await redis.xRead(
+      [{ key: 'visitor-events', id: lastId }],
+      { BLOCK: 0 }
+    ) as StreamResponse[] | null;
+    
+    if (response) {
+      for (const stream of response) {
+        for (const message of stream.messages) {
+          lastId = message.id;
+          callback(message.message as StreamEvent);
+        }
       }
     }
+  }
 }
-  
