@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { VisitorEventSchema } from '../dto/VisitorEvent';
+import redis from '@/config/redisClient';
+import { serializeForRedis } from '@/modules/analytics/utils/serializeForRedis';
 
 export default class EventController {
   async ingest(req: Request, res: Response) {
@@ -12,6 +14,12 @@ export default class EventController {
         issues: parseResult.error.issues,
       });
     }
+
+    await redis.xAdd(
+      'visitor-events',
+      '*',
+      serializeForRedis(parseResult.data)
+    );
 
     res.status(202).send({ status: 'queued' });
   }
