@@ -1,9 +1,10 @@
 {
   "name": "visitor-analytics",
-  "module": "index.ts",
-  "type": "module",
+  "main": "./dist/server.js",
   "scripts": {
-    "dev": "npx tsx --watch src/server.ts"
+    "dev": "npx tsx --watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
   },
   "devDependencies": {
     "@types/bun": "latest",
